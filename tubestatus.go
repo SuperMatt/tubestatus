@@ -10,40 +10,64 @@ import(
     "io/ioutil"
 )
 
-var lines = []string{"bakerloo",
-              "central",
-              "circle",
-              "district",
-              "hammersmith-city",
-              "jubilee",
-              "metropolitan",
-              "northern",
-              "piccadilly",
-              "victoria",
-              "waterloo-city",
-              "london-overground",
-              "tfl-rail"}
+type TubeLine struct {
+    ID string
+    FullName string
+    Shortcuts []string
+}
 
-func GetLine(l string, lines []string) (string, error) {
+var Bakerloo = TubeLine{ID: "bakerloo", FullName: "Bakerloo", Shortcuts: []string{"b", "bl"}}
+var Central = TubeLine{ID: "central", FullName: "Central", Shortcuts: []string{"ce"}}
+var Circle = TubeLine{ID: "circle", FullName: "Circle", Shortcuts: []string{"ci"}}
+var District = TubeLine{ID: "district", FullName: "District", Shortcuts: []string{"d"}}
+var HammersmithCity = TubeLine{ID: "hammersmith-city", FullName: "Hammersmith and City", Shortcuts: []string{"h", "hc", "hs", "hsc"}}
+var Jubilee = TubeLine{ID: "jubilee", FullName: "Jubilee", Shortcuts: []string{"j"}}
+var Metropolitan = TubeLine{ID: "metropolitan", FullName: "Metropolitan", Shortcuts: []string{"m"}}
+var Northern = TubeLine{ID: "northern", FullName: "Nothern", Shortcuts: []string{"n"}}
+var Piccadilly = TubeLine{ID: "piccadilly", FullName: "Piccadilly", Shortcuts: []string{"p"}}
+var Victoria = TubeLine{ID: "victoria", FullName: "Victoria", Shortcuts: []string{"v"}}
+var WaterlooCity = TubeLine{ID: "waterloo-city", FullName: "Wanterloo and City", Shortcuts: []string{"w", "wc", "wl", "wlc"}}
+var Overground = TubeLine{ID: "london-overground", FullName: "London Overground", Shortcuts: []string{"o", "lo", "og", "log"}}
+var TflRail = TubeLine{ID: "tfl-rail", FullName: "TFL Rail", Shortcuts: []string{"r", "tflr"}}
+
+var lines = []TubeLine{Bakerloo,
+                       Central,
+                       Circle,
+                       District,
+                       HammersmithCity,
+                       Jubilee,
+                       Metropolitan,
+                       Northern,
+                       Piccadilly,
+                       Victoria,
+                       WaterlooCity,
+                       Overground,
+                       TflRail}
+
+func GetLine(l string) (TubeLine, error) {
     numlines := 0
-    var selectedLine string
+    var selectedLine TubeLine
     arglen := len(l)
     for _, line := range(lines) {
-        if line[:arglen] == l {
+        if line.ID[:arglen] == l {
             selectedLine = line
             numlines += 1
+        } else {
+            for _, sc := range(line.Shortcuts) {
+                if sc == l {
+                    selectedLine = line
+                    numlines += 1
+                }
+            }
         }
     }
 
     if numlines > 1 {
-        return "", errors.New("Too many lines start with " + l + ". Try adding an extra letter.")
+        return selectedLine, errors.New("Too many lines start with " + l + ". Try adding an extra letter.")
     } else if numlines < 1 {
-        return "", errors.New("There are no lines which start with " + l + ".")
-    } else {
-        return selectedLine, nil
+        return selectedLine, errors.New("There are no lines which start with " + l + ".")
     }
-
-    return "", errors.New("Could not find associated line")
+    return selectedLine, nil
 }
 
 func main() {
@@ -56,10 +80,10 @@ func main() {
 
     args := os.Args[3:]
 
-    var selectedLines []string
+    var selectedLines []TubeLine
 
     for _, l := range(args) {
-        line, err := GetLine(l, lines)
+        line, err := GetLine(l)
         if err != nil {
             log.Fatal(err)
         }
@@ -68,8 +92,8 @@ func main() {
     }
 
     for _, line := range(selectedLines) {
-        fmt.Println(line)
-        resp, err := http.Get("https://api.tfl.gov.uk/Line/" + line + "/Disruption?app_id=" + app_id + "&app_key=" + app_key)
+        fmt.Println(line.FullName)
+        resp, err := http.Get("https://api.tfl.gov.uk/Line/" + line.ID + "/Disruption?app_id=" + app_id + "&app_key=" + app_key)
         if err != nil {
             log.Fatal(err)
         }
