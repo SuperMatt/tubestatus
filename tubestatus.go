@@ -3,10 +3,8 @@ package main
 import(
     "net/http"
     "fmt"
-    "log"
     "encoding/json"
     "os"
-    "errors"
     "io/ioutil"
     "flag"
 )
@@ -33,76 +31,34 @@ var TflRail = TubeLine{ID: "tfl-rail", FullName: "TFL Rail", Shortcuts: []string
 var DLR = TubeLine{ID: "dlr", FullName: "DLR", Shortcuts: []string{"dl", "dlr"}}
 var Tram = TubeLine{ID: "tram", FullName: "Tram", Shortcuts: []string{"t"}}
 
-var lines = []TubeLine{ Bakerloo,
-                        Central,
-                        Circle,
-                        District,
-                        HammersmithCity,
-                        Jubilee,
-                        Metropolitan,
-                        Northern,
-                        Piccadilly,
-                        Victoria,
-                        WaterlooCity,
-                        Overground,
-                        TflRail,
-                        DLR,
-                        Tram}
-
-func GetLine(l string) (TubeLine, error) {
-    numlines := 0
-    var selectedLine TubeLine
-    for _, line := range(lines) {
-        if line.ID == l {
-            selectedLine = line
-            numlines += 1
-        } else if len(l) <= len(line.ID) {
-            arglen := len(l)
-            if line.ID[:arglen] == l {
-                selectedLine = line
-                numlines += 1
-            } else {
-                for _, sc := range(line.Shortcuts) {
-                    if sc == l {
-                        selectedLine = line
-                        numlines += 1
-                    }
-                }
-            }
-        }
-    }
-
-    if numlines > 1 {
-        return selectedLine, errors.New("Too many lines start with " + l + ". Try adding an extra letter.")
-    } else if numlines < 1 {
-        return selectedLine, errors.New("There are no lines which start with " + l + ".")
-    }
-    return selectedLine, nil
-}
+var lines = map[string]TubeLine{ "bakerloo": Bakerloo,
+                        "central": Central,
+                        "circle": Circle,
+                        "district": District,
+                        "hammersmith-city": HammersmithCity,
+                        "jubilee": Jubilee,
+                        "metropolitan": Metropolitan,
+                        "northern": Northern,
+                        "piccadilly": Piccadilly,
+                        "victoria": Victoria,
+                        "waterloo-city": WaterlooCity,
+                        "london-overground": Overground,
+                        "tfl-rail": TflRail,
+                        "dlr": DLR,
+                        "tram": Tram}
 
 func main() {
     var app_id = flag.String("app_id", "nil", "TFL Api app_id")
     var app_key = flag.String("app_key", "nil", "TFL Api app_key")
     flag.Parse()
 
-    lines := flag.Args()
+    argsLines := flag.Args()
 
-    if len(lines) == 0 {
+    if len(argsLines) == 0 {
         appname := os.Args[0]
         fmt.Println("Usage of " + appname + ":")
         flag.PrintDefaults()
         os.Exit(1)
-    }
-
-    var selectedLines []TubeLine
-
-    for _, l := range(lines) {
-        line, err := GetLine(l)
-        if err != nil {
-            log.Fatal(err)
-        }
-
-        selectedLines = append(selectedLines, line)
     }
 
     resp, err := http.Get("https://api.tfl.gov.uk/Line/Mode/tube,tflrail,dlr,overground,tram/Status?app_id=" + *app_id + "&app_key=" + *app_key)
@@ -121,17 +77,30 @@ func main() {
     json.Unmarshal(bodyBytes, &bodyJson)
     for _,v := range(bodyJson) {
         apiline := v.(map[string]interface{})
-        for _, selectedLine :=range(selectedLines) {
-            if selectedLine.ID == apiline["id"] {
-                status := apiline["lineStatuses"].([]interface{})
-                for _, v2 := range(status) {
-                    status2 := v2.(map[string]interface{})
-                    statusSeverity := status2["statusSeverity"].(float64)
-                    if statusSeverity != 10 {
-                        disruption := status2["disruption"].(map[string]interface{})
-                        description := disruption["description"].(string)
-                        fmt.Println(description)
+        linename := apiline["id"].(string)
+        Line := lines[linename]
+        shortcuts := Line.Shortcuts
+        var foundLine = 0
+        for _, sl := range(flag.Args()) {
+            if sl == linename {
+                foundLine += 1
+            } else {
+                for _, sc := range(shortcuts) {
+                    if sl == sc {
+                        foundLine += 1
                     }
+                }
+            }
+        }
+        if foundLine == 1 {
+            status := apiline["lineStatuses"].([]interface{})
+            for _, v2 := range(status) {
+                status2 := v2.(map[string]interface{})
+                statusSeverity := status2["statusSeverity"].(float64)
+                if statusSeverity != 10 {
+                    disruption := status2["disruption"].(map[string]interface{})
+                    description := disruption["description"].(string)
+                    fmt.Println(description)
                 }
             }
         }
