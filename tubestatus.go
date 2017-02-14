@@ -8,6 +8,7 @@ import(
     "os"
     "errors"
     "io/ioutil"
+    "flag"
 )
 
 type TubeLine struct {
@@ -19,7 +20,7 @@ type TubeLine struct {
 var Bakerloo = TubeLine{ID: "bakerloo", FullName: "Bakerloo", Shortcuts: []string{"b", "bl"}}
 var Central = TubeLine{ID: "central", FullName: "Central", Shortcuts: []string{"ce"}}
 var Circle = TubeLine{ID: "circle", FullName: "Circle", Shortcuts: []string{"ci"}}
-var District = TubeLine{ID: "district", FullName: "District", Shortcuts: []string{"d"}}
+var District = TubeLine{ID: "district", FullName: "District", Shortcuts: []string{"di"}}
 var HammersmithCity = TubeLine{ID: "hammersmith-city", FullName: "Hammersmith and City", Shortcuts: []string{"h", "hc", "hs", "hsc"}}
 var Jubilee = TubeLine{ID: "jubilee", FullName: "Jubilee", Shortcuts: []string{"j"}}
 var Metropolitan = TubeLine{ID: "metropolitan", FullName: "Metropolitan", Shortcuts: []string{"m"}}
@@ -29,34 +30,43 @@ var Victoria = TubeLine{ID: "victoria", FullName: "Victoria", Shortcuts: []strin
 var WaterlooCity = TubeLine{ID: "waterloo-city", FullName: "Wanterloo and City", Shortcuts: []string{"w", "wc", "wl", "wlc"}}
 var Overground = TubeLine{ID: "london-overground", FullName: "London Overground", Shortcuts: []string{"o", "lo", "og", "log"}}
 var TflRail = TubeLine{ID: "tfl-rail", FullName: "TFL Rail", Shortcuts: []string{"r", "tflr"}}
+var DLR = TubeLine{ID: "dlr", FullName: "DLR", Shortcuts: []string{"dl", "dlr"}}
+var Tram = TubeLine{ID: "tram", FullName: "Tram", Shortcuts: []string{"t"}}
 
-var lines = []TubeLine{Bakerloo,
-                       Central,
-                       Circle,
-                       District,
-                       HammersmithCity,
-                       Jubilee,
-                       Metropolitan,
-                       Northern,
-                       Piccadilly,
-                       Victoria,
-                       WaterlooCity,
-                       Overground,
-                       TflRail}
+var lines = []TubeLine{ Bakerloo,
+                        Central,
+                        Circle,
+                        District,
+                        HammersmithCity,
+                        Jubilee,
+                        Metropolitan,
+                        Northern,
+                        Piccadilly,
+                        Victoria,
+                        WaterlooCity,
+                        Overground,
+                        TflRail,
+                        DLR,
+                        Tram}
 
 func GetLine(l string) (TubeLine, error) {
     numlines := 0
     var selectedLine TubeLine
-    arglen := len(l)
     for _, line := range(lines) {
-        if line.ID[:arglen] == l {
+        if line.ID == l {
             selectedLine = line
             numlines += 1
-        } else {
-            for _, sc := range(line.Shortcuts) {
-                if sc == l {
-                    selectedLine = line
-                    numlines += 1
+        } else if len(l) <= len(line.ID) {
+            arglen := len(l)
+            if line.ID[:arglen] == l {
+                selectedLine = line
+                numlines += 1
+            } else {
+                for _, sc := range(line.Shortcuts) {
+                    if sc == l {
+                        selectedLine = line
+                        numlines += 1
+                    }
                 }
             }
         }
@@ -71,18 +81,22 @@ func GetLine(l string) (TubeLine, error) {
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        log.Fatal("No arguments provided, exiting")
+    var app_id = flag.String("app_id", "nil", "TFL Api app_id")
+    var app_key = flag.String("app_key", "nil", "TFL Api app_key")
+    flag.Parse()
+
+    lines := flag.Args()
+
+    if len(lines) == 0 {
+        appname := os.Args[0]
+        fmt.Println("Usage of " + appname + ":")
+        flag.PrintDefaults()
+        os.Exit(1)
     }
-
-    app_id := os.Args[1]
-    app_key := os.Args[2]
-
-    args := os.Args[3:]
 
     var selectedLines []TubeLine
 
-    for _, l := range(args) {
+    for _, l := range(lines) {
         line, err := GetLine(l)
         if err != nil {
             log.Fatal(err)
@@ -91,28 +105,35 @@ func main() {
         selectedLines = append(selectedLines, line)
     }
 
-    for _, line := range(selectedLines) {
-        fmt.Println(line.FullName)
-        resp, err := http.Get("https://api.tfl.gov.uk/Line/" + line.ID + "/Disruption?app_id=" + app_id + "&app_key=" + app_key)
-        if err != nil {
-            log.Fatal(err)
-        }
+    resp, err := http.Get("https://api.tfl.gov.uk/Line/Mode/tube,tflrail,dlr,overground,tram/Status?app_id=" + *app_id + "&app_key=" + *app_key)
+    if err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
 
-        var unmarshalledstatus interface{}
+    bodyBytes, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
 
-        linejson, err := ioutil.ReadAll(resp.Body)
-        if err != nil {
-            log.Fatal(err)
-        }
-
-        if string(linejson) != "[]" {
-            err = json.Unmarshal(linejson, &unmarshalledstatus)
-            if err != nil {
-                log.Fatal(err)
+    var bodyJson []interface{}
+    json.Unmarshal(bodyBytes, &bodyJson)
+    for _,v := range(bodyJson) {
+        apiline := v.(map[string]interface{})
+        for _, selectedLine :=range(selectedLines) {
+            if selectedLine.ID == apiline["id"] {
+                status := apiline["lineStatuses"].([]interface{})
+                for _, v2 := range(status) {
+                    status2 := v2.(map[string]interface{})
+                    statusSeverity := status2["statusSeverity"].(float64)
+                    if statusSeverity != 10 {
+                        disruption := status2["disruption"].(map[string]interface{})
+                        description := disruption["description"].(string)
+                        fmt.Println(description)
+                    }
+                }
             }
-            status := unmarshalledstatus.([]interface{})[0]
-            lineStatuses := status.(map[string]interface{})
-            fmt.Println(lineStatuses["description"])
         }
     }
 }
