@@ -7,6 +7,7 @@ import(
     "os"
     "io/ioutil"
     "flag"
+    "os/user"
 )
 
 type TubeLine struct {
@@ -48,11 +49,48 @@ var lines = map[string]TubeLine{ "bakerloo": Bakerloo,
                         "tram": Tram}
 
 func main() {
-    var app_id = flag.String("app_id", "nil", "TFL Api app_id")
-    var app_key = flag.String("app_key", "nil", "TFL Api app_key")
+
+    curruser, _ := user.Current()
+    homedir := curruser.HomeDir
+
+    var confjson interface{}
+    var conf map[string]interface{}
+    var app_id string
+    var app_key string
+    var conf_lines []interface{}
+
+    conffile, err := ioutil.ReadFile(homedir + "/.config/tubestatus/config.json")
+    if err == nil {
+        _ = json.Unmarshal(conffile, &confjson)
+        conf = confjson.(map[string]interface{})
+        app_id = conf["app_id"].(string)
+        app_key = conf["app_key"].(string)
+        conf_lines = conf["lines"].([]interface{})
+    }
+
+    var flag_app_id = flag.String("app_id", "nil", "TFL Api app_id")
+    var flag_app_key = flag.String("app_key", "nil", "TFL Api app_key")
     flag.Parse()
 
-    argsLines := flag.Args()
+    if *flag_app_id != "nil" {
+        app_id = *flag_app_id
+    }
+
+    if *flag_app_key != "nil" {
+        app_id = *flag_app_key
+    }
+
+    var argsLines []string
+
+    flagLines := flag.Args()
+
+    if len(flagLines) == 0 {
+        for _, v := range(conf_lines) {
+            argsLines = append(argsLines, v.(string))
+        }
+    } else {
+        argsLines = flagLines
+    }
 
     if len(argsLines) == 0 {
         appname := os.Args[0]
@@ -61,7 +99,7 @@ func main() {
         os.Exit(1)
     }
 
-    resp, err := http.Get("https://api.tfl.gov.uk/Line/Mode/tube,tflrail,dlr,overground,tram/Status?app_id=" + *app_id + "&app_key=" + *app_key)
+    resp, err := http.Get("https://api.tfl.gov.uk/Line/Mode/tube,tflrail,dlr,overground,tram/Status?app_id=" + app_id + "&app_key=" + app_key)
     if err != nil {
         fmt.Println(err)
         os.Exit(1)
@@ -81,7 +119,7 @@ func main() {
         Line := lines[linename]
         shortcuts := Line.Shortcuts
         var foundLine = 0
-        for _, sl := range(flag.Args()) {
+        for _, sl := range(argsLines) {
             if sl == linename {
                 foundLine += 1
             } else {
